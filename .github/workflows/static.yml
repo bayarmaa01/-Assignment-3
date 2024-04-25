@@ -1,0 +1,117 @@
+# Name of the GitHub Actions workflow
+name: Selenium Automation Testing and Deployment
+
+# Triggers for when the workflow should run
+on:
+  # Runs when changes are pushed to the default branch (main)
+  push:
+    branches: ["main"]
+
+  # Allows manual triggering of the workflow from the Actions tab
+  workflow_dispatch:
+
+# Sets permissions for the GitHub token used in deployment
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+# Controls concurrent deployments to avoid conflicts
+concurrency:
+  group: "pages"  # Group for concurrency control
+  cancel-in-progress: false  # Don't cancel ongoing deployments
+
+# Define jobs to be executed
+jobs:
+  # Job for running Selenium tests
+  test:
+    needs: sonarcloud
+    runs-on: ubuntu-latest  # Runs on Ubuntu environment
+
+    # Steps to execute within the job
+    steps:
+      # Step to checkout the repository code
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      # Step to set up Python environment
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.12"  # Version of Python to set up
+
+      # Step to install Chrome WebDriver for Selenium
+      - name: Install Chrome WebDriver
+        run: |
+          LATEST=$(wget -q -O - https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE)
+          wget https://storage.googleapis.com/chrome-for-testing-public/$LATEST/linux64/chromedriver-linux64.zip
+          unzip chromedriver-linux64.zip
+          cd chromedriver-linux64
+          sudo mv chromedriver /usr/local/bin/
+          sudo chmod +x /usr/local/bin/chromedriver
+
+      # Step to install Selenium library
+      - name: Install Selenium
+        run: pip install selenium
+
+      # Step to execute Selenium tests
+      - name: Run Selenium tests
+        run: python static.py
+
+      # Step to save screenshots if tests succeed
+      - name: Save screenshot to repository
+        if: ${{ success() }}  # Condition to run only if tests succeed
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git add screenshot_*.png
+          git commit -m "Add screenshot taken during Selenium test"
+          git push
+
+  sonarcloud:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # Job for deploying to GitHub Pages
+  deploy:
+    # Depends on completion of the 'test' job
+    needs: test
+
+    # Define the environment for deployment
+    environment:
+      name: github-pages  # Name of the deployment environment
+      url: ${{ steps.deployment.outputs.page_url }}  # URL for deployed GitHub Pages
+
+    # Runs the job on Ubuntu environment
+    runs-on: ubuntu-latest
+
+    # Steps to execute within the deployment job
+    steps:
+      # Step to checkout the repository code
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Step to configure GitHub Pages deployment
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      # Step to upload the entire repository as an artifact
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "."  # Uploads the entire repository
+
+      # Step to deploy the repository to GitHub Pages
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+ 
