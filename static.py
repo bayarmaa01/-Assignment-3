@@ -13,7 +13,7 @@ driver.get("https://bayarmaa01.github.io/-Assignment-3/")  # Update this with th
 time.sleep(2)  # Adding a delay to see the result
 
 # Assert some condition to verify the result
-assert "" in driver.title
+assert "Coffee" in driver.title
 
 # Take a screenshot
 timestamp = time.strftime("%Y%m%d-%H%M%S")
